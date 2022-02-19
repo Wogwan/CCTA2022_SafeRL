@@ -14,7 +14,7 @@ if cm(1) == 'M' ||  cm(1)=='G'
     addpath '../toolbox/nlanal';
     
     % Add my version of SOSTools
-   addpath '../toolbox/sosopt';
+    addpath '../toolbox/sosopt';
     addpath '../toolbox/sosopt/Demos';
     
     % Add polysys
