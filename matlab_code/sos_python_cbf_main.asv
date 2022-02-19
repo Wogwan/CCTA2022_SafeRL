@@ -1,0 +1,10 @@
+function sos_python_cbf_main(a_rl)
+pvar x1 x2
+sys.g = 10; sys.gg = [0;1];
+sys.l = 1.; % Real value = 1.0
+sys.m = 1.; % Real value = 1.0
+sys.u_degree = 2; sys.L_au = 6;
+
+% Taylor based equation: taylor(10*sin(x1))
+f1 = x2;
+f2 = x1^5/12 -5/3*x1^3+10*x1+a_rl; % f2 = 10*sin(x1)+a_rl
