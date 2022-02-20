@@ -27,7 +27,7 @@ u_degree=2; L_au=6;
 % h=polynomial;
 % L1=0; L1_Q=0; 
 %%
-pvar x1 x2
+pvar x1 x2 obj_c
 f1 = x2;
 % f21 = f2;
 % f22 = sos_poly_add(a_rl);
@@ -43,13 +43,17 @@ hdot = jacobian(h, x1)*(f1) + jacobian(h, x2)*(f2+u2);
 %% Constraint:
 pconstr_12 = L1 >= 0;
 % pconstr_22 = sos_constrain_2(hdot,L1,h);
-pconstr_22 = hdot - L1*h >= 0;
-pconstr = [pconstr_12; pconstr_22];
+pconstr_22 = hdot - L1*h - obj_c >= 0;
+pconstr_33 = obj_c >= 0;
+% pconstr = [pconstr_12; pconstr_22];
+pconstr = [pconstr_12; pconstr_33; pconstr_22];
 %% Solver parameters
+obj = -obj_c;
 opts = sosoptions;
 opts.form = 'kernel';
 opts.solver = 'mosek'; % 'sedumi'
-[info,dopt] = sosopt(pconstr,[x1;x2],opts);
+% [info,dopt] = sosopt(pconstr,[x1;x2],opts);
+[info,dopt] = sosopt(pconstr,[x1;x2],obj,opts);
 %% Check output
 if info.feas
     u_output = subs(u2,dopt);

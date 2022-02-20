@@ -1,0 +1,114 @@
+/home/matlab/.local/lib/python3.8/site-packages/gym/spaces/box.py:73: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(
+{'actor_lr': 0.0001,
+ 'buffer_size': 1000000,
+ 'critic_lr': 0.001,
+ 'csv_dir': './res/SOSP/csv/2022-02-20-20-35-29',
+ 'env': 'Pendulum-v1',
+ 'gamma': 0.99,
+ 'mat_dir': './res/mat',
+ 'max_episode_len': 200,
+ 'max_episodes': 150,
+ 'method': 'SOSP',
+ 'minibatch_size': 64,
+ 'mlp_lr': 0.0001,
+ 'mlp_mode': 'original',
+ 'monitor_dir': './res/SOSP/gym_ddpg/2022-02-20-20-35-29',
+ 'random_seed': 1234,
+ 'render_env': False,
+ 'summary_dir': './res/SOSP/tensorboard/2022-02-20-20-35-29',
+ 'tau': 0.001,
+ 'use_gym_monitor': False}
+Model: "model"
+_________________________________________________________________
+ Layer (type)                Output Shape              Param #   
+=================================================================
+ input_1 (InputLayer)        [(None, 3)]               0         
+                                                                 
+ dense (Dense)               (None, 400)               1600      
+                                                                 
+ batch_normalization (BatchN  (None, 400)              1600      
+ ormalization)                                                   
+                                                                 
+ re_lu (ReLU)                (None, 400)               0         
+                                                                 
+ dense_1 (Dense)             (None, 300)               120300    
+                                                                 
+ batch_normalization_1 (Batc  (None, 300)              1200      
+ hNormalization)                                                 
+                                                                 
+ re_lu_1 (ReLU)              (None, 300)               0         
+                                                                 
+ dense_2 (Dense)             (None, 1)                 301       
+                                                                 
+ multiply (Multiply)         (None, 1)                 0         
+                                                                 
+=================================================================
+Total params: 125,001
+Trainable params: 123,601
+Non-trainable params: 1,400
+_________________________________________________________________
+Model: "model_2"
+__________________________________________________________________________________________________
+ Layer (type)                   Output Shape         Param #     Connected to                     
+==================================================================================================
+ input_3 (InputLayer)           [(None, 3)]          0           []                               
+                                                                                                  
+ dense_6 (Dense)                (None, 400)          1600        ['input_3[0][0]']                
+                                                                                                  
+ batch_normalization_4 (BatchNo  (None, 400)         1600        ['dense_6[0][0]']                
+ rmalization)                                                                                     
+                                                                                                  
+ re_lu_4 (ReLU)                 (None, 400)          0           ['batch_normalization_4[0][0]']  
+                                                                                                  
+ input_4 (InputLayer)           [(None, 1)]          0           []                               
+                                                                                                  
+ dense_7 (Dense)                (None, 300)          120000      ['re_lu_4[0][0]']                
+                                                                                                  
+ dense_8 (Dense)                (None, 300)          600         ['input_4[0][0]']                
+                                                                                                  
+ add (Add)                      (None, 300)          0           ['dense_7[0][0]',                
+                                                                  'dense_8[0][0]']                
+                                                                                                  
+ re_lu_5 (ReLU)                 (None, 300)          0           ['add[0][0]']                    
+                                                                                                  
+ dense_9 (Dense)                (None, 1)            301         ['re_lu_5[0][0]']                
+                                                                                                  
+==================================================================================================
+Total params: 124,101
+Trainable params: 123,301
+Non-trainable params: 800
+__________________________________________________________________________________________________
+Observation space Box([ -1.  -1. -60.], [ 1.  1. 60.], (3,), float32)
+Action space Box([-15.], [15.], (1,), float32)
+Initializing Barrier Compensation network
+Model: "model_4"
+_________________________________________________________________
+ Layer (type)                Output Shape              Param #   
+=================================================================
+ Obs (InputLayer)            [(None, 3)]               0         
+                                                                 
+ h1 (Dense)                  (None, 30)                120       
+                                                                 
+ h2 (Dense)                  (None, 20)                620       
+                                                                 
+ h3 (Dense)                  (None, 1)                 21        
+                                                                 
+=================================================================
+Total params: 761
+Trainable params: 761
+Non-trainable params: 0
+_________________________________________________________________
+SOSP control is: [-6.64000784] | Next state: 0.6873803667785893 -1.0276359325892446
+Traceback (most recent call last):
+  File "ddpg_sos.py", line 664, in <module>
+    app.run(main)
+  File "/home/matlab/.local/lib/python3.8/site-packages/absl/app.py", line 312, in run
+    _run_main(main, args)
+  File "/home/matlab/.local/lib/python3.8/site-packages/absl/app.py", line 258, in _run_main
+    sys.exit(main(argv))
+  File "ddpg_sos.py", line 653, in main
+    [paths, reward_result] = train(env, args, actor, critic, actor_noise, agent, eng)
+  File "ddpg_sos.py", line 391, in train
+    action_ = action_RL + u_bar_  # (1, )
+TypeError: unsupported operand type(s) for +: 'float' and 'NoneType'

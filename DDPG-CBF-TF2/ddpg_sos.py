@@ -43,6 +43,7 @@ import matlab.engine
 
 
 def parse_args():
+    cur_time = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
     parser = argparse.ArgumentParser(description='provide arguments for DDPG agent')
 
     # agent parameters
@@ -62,11 +63,12 @@ def parse_args():
     parser.add_argument('--max-episode-len', help='max length of 1 episode', default=200)  #
     parser.add_argument('--render-env', help='render the gym env', action='store_false')
     parser.add_argument('--use-gym-monitor', help='record gym results', action='store_false')
-    parser.add_argument('--monitor-dir', help='directory for storing gym results', default='./res/gym_ddpg')
-    parser.add_argument('--summary-dir', help='directory for storing tensorboard info', default='./res/tf_ddpg_cbf')
+    parser.add_argument('--monitor-dir', help='directory for storing gym results', default='./res/SOSP/gym_ddpg/{}'.format(cur_time))
+    parser.add_argument('--summary-dir', help='directory for storing tensorboard info', default='./res/SOSP/tensorboard/{}'.format(cur_time))
     parser.add_argument('--mat-dir', help='directory for storing mat info', default='./res/mat')
-    parser.add_argument('--csv-dir', help='directory for storing csv info', default='./res/csv')
+    parser.add_argument('--csv-dir', help='directory for storing csv info', default='./res/SOSP/csv/{}'.format(cur_time))
     parser.add_argument('--mlp-mode', help='MLP model training model', default='original')  # original OR revised
+    parser.add_argument('--method', help='QP/SOSP/ONLY(ddpg)', default='SOSP')
 
     parser.set_defaults(render_env=False)
     parser.set_defaults(use_gym_monitor=False)
@@ -307,9 +309,13 @@ class OrnsteinUhlenbeckActionNoise:
 def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
     # Set up summary Ops
     # summary_ops, summary_vars = build_summaries()
+    sub_episodes = 5
     writer = tf.summary.create_file_writer(args['summary_dir'])
-    reward_result = np.zeros(int(args['max_episodes']))
-    maxq_result = np.zeros(int(args['max_episodes']))
+    reward_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
+    maxq_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
+    max_angle_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
+    max_angleSpeed_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
+    
     # sess.run(tf.global_variables_initializer())
 
     # Initialize target network weights
@@ -336,9 +342,10 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
             agent.GP_model_prev = agent.GP_model.copy()
             dynamics_gp.build_GP_model(agent)
 
-        for el in range(5):
+        for el in range(sub_episodes):
             # 每次结束后都会Update一次GP model(除最后一次), 但本次episodes仍使用上一ep训练的GP，不会采用本轮最新实时update的GP.
             obs, action, rewards, action_bar, action_BAR, action_RL_list = [], [], [], [], [], []
+            unwrapped_state_lst = []
 
             s = env.reset()
             # a_temp = env.unwrapped.state
@@ -384,9 +391,9 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                 action_ = action_RL + u_bar_  # (1, )
 
                 s2, r, terminal, info = env.step(action_)  # r: reward
-                s_next_state = env.unwrapped.state
+                s_next_unwrapped_state = env.unwrapped.state
 
-                print('SOSP control is:', u_bar_, '| Next state:', s_next_state[0], s_next_state[1])
+                print('SOSP control is:', u_bar_, '| Next state:', s_next_unwrapped_state[0], s_next_unwrapped_state[1])
 
                 # TODO 注意维度
                 # 此处存的时RL_policy原始的action, 仅对RL_Policy进行更新
@@ -442,26 +449,36 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                 action_BAR.append(u_BAR_)
                 action.append(action_)
                 action_RL_list.append(action_rl)
+                unwrapped_state_lst.append(s_next_unwrapped_state) # theta, theta_dot
 
                 if terminal:
+                    reward_result[i * sub_episodes + el] = ep_reward
+                    maxq_result[i * sub_episodes + el] = ep_ave_max_q / float(j)
+                    obs_x = np.concatenate(unwrapped_state_lst).reshape((200, 2))
+                    max_theta = np.max(obs_x[:, 0])
+                    max_angle_result[i * sub_episodes + el] = max_theta
+                    max_thetaDot = np.max(obs_x[:, 1])
+                    max_angleSpeed_result[i * sub_episodes + el] = max_thetaDot
+
                     print('SOSP control is:', u_bar_, '| Next state:', s2[0], s2[1])
                     print('action_rl:', action_rl, '|', ' u_BAR:', u_BAR_, '|', 'u_bar:', u_bar_, '|', 'output:',
                           action_)
-
+                    #    print(action[len(action) - 1], '|', action_bar[len(action_bar) - 1], '|',
+                    #         action_RL_list[len(action_RL_list) - 1], '|', action_BAR[len(action_BAR) - 1])
                     # print(obs)
                     # print(obs.shape)
                     # breakpoint()
                     with writer.as_default():
-                        print(action[len(action) - 1], '|', action_bar[len(action_bar) - 1], '|',
-                              action_RL_list[len(action_RL_list) - 1], '|', action_BAR[len(action_BAR) - 1])
-                        tf.summary.scalar("Reward", ep_reward, step=i)
-                        tf.summary.scalar("Qmax Value", ep_ave_max_q / float(j), step=i)
+                        tf.summary.scalar("Reward", ep_reward, step=i*sub_episodes+el)
+                        tf.summary.scalar("Qmax Value",  ep_ave_max_q / float(j), step=i*sub_episodes+el)    
+                        tf.summary.scalar("Max Angle", max_theta, step=i*sub_episodes+el)
+                        tf.summary.scalar("Max Angle Speed", max_thetaDot, step=i*sub_episodes+el)
                     writer.flush()
 
-                    print('| Reward: {:d} | Episode: {:d} | Qmax: {:.4f}'.format(int(ep_reward), i,
-                                                                                 (ep_ave_max_q / float(j))))
-                    reward_result[i] = ep_reward
-                    maxq_result[i] = ep_ave_max_q / float(j)
+                    print('| Episode: {:d} sub- {} | Reward: {:d} | Qmax: {:.4f} | MaxAngle: {} | MaxAngleSpeed: {} '.format(i, i*sub_episodes+el, int(ep_reward), (ep_ave_max_q / float(j)), max_theta, max_thetaDot))
+                    print('-'*20)
+                    # reward_result[i] = ep_reward
+                    # maxq_result[i] = ep_ave_max_q / float(j)
                     # 200为最大max_time_steps
                     # (200, 3)
                     path = {"Observation": np.concatenate(obs).reshape(
@@ -471,28 +488,93 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                             "Action_BAR": np.concatenate(action_BAR),
                             "Reward": np.asarray(rewards)}
                     paths.append(path)
+                    cur_iter = i * sub_episodes + el + 1
+                    save_dir = args['csv_dir']
+                    os.makedirs(save_dir, exist_ok=True)
+                    # max_angleSpeed_result
+                    rec_pd = pd.DataFrame({'Reward': reward_result[:cur_iter], 
+                                            'Qmax': maxq_result[:cur_iter], 
+                                            'MaxAngle': max_angle_result[:cur_iter],
+                                            'MaxAngleSpeed':max_angleSpeed_result[:cur_iter]},
+                                            columns=['Reward', 'Qmax', 'MaxAngle', 'MaxAngleSpeed'])
+                    rec_pd.to_csv(os.path.join(save_dir, 'log.csv'), index=False)     
 
-                    os.makedirs(args['csv_dir'], exist_ok=True)
-                    rec_pd = pd.DataFrame({'Reward': reward_result[:i + 1], 'Qmax': maxq_result[:i + 1]},
-                                          columns=['Reward', 'Qmax'])
-                    rec_pd.to_csv(os.path.join(args['csv_dir'], 'log.csv'), index=False)
+                    # Log data in each step
+                    step_data_dir = os.path.join(save_dir, 'step_data')
+                    os.makedirs(step_data_dir, exist_ok=True)
+                    step_data = pd.DataFrame({'Reward': rewards, 
+                                              'Action':  np.concatenate(action), 
+                                              'Angle': obs_x[:, 0],
+                                              'AngleSpeed': obs_x[:, 1],
+                                              'Action_RL':  np.concatenate(action_RL_list),
+                                              'Action_ubar': np.concatenate(action_bar),
+                                              'Action_uBAR':  np.concatenate(action_BAR)},
+                                            columns=['Reward', 'Action', 'Angle', 'AngleSpeed', 'Action_RL', 'Action_ubar', 'Action_uBAR'])
+                    step_data.to_csv(os.path.join(step_data_dir, '{}.csv'.format(cur_iter)), index=False)
 
                     # Trend graph
-                    fig = plt.figure(figsize=(12, 6))
-                    ax1 = plt.subplot(1, 2, 1)
-                    ax1.plot(np.arange(len(maxq_result[:i + 1])), maxq_result[:i + 1])
-                    ax1.set_xlabel('Episode')
-                    ax1.set_ylabel('Max Q value')
+                    fig = plt.figure()
+                    plt.plot(np.arange(len(maxq_result[:cur_iter])), maxq_result[:cur_iter])
+                    plt.xlabel('Episode')
+                    plt.ylabel('Max Q value')
                     pic_name = "Convergence of Max Q Value"
                     plt.title(pic_name)
+                    img_path = os.path.join(save_dir, "MaxQ.png")
+                    plt.savefig(img_path)
+                    plt.close('all')
 
-                    ax2 = plt.subplot(1, 2, 2)
-                    ax2.plot(np.arange(len(reward_result[:i + 1])), reward_result[:i + 1])
-                    ax2.set_xlabel('Episode')
-                    ax2.set_ylabel('Reward')
+                    fig = plt.figure()
+                    plt.plot(np.arange(len(reward_result[:cur_iter])), reward_result[:cur_iter])
+                    plt.xlabel('Episode')
+                    plt.ylabel('Reward')
                     pic_name = "Reward vs. Episode"
                     plt.title(pic_name)
-                    img_path = os.path.join(args['csv_dir'], "Trend.png")
+                    img_path = os.path.join(save_dir, "Reward.png")
+                    plt.savefig(img_path)
+                    plt.close('all')
+
+                    fig = plt.figure()
+                    plt.plot(np.arange(len(max_angle_result[:cur_iter])), np.ones(len(max_angle_result[:cur_iter])), label='Safe Boundary', color='k', linestyle='--')
+                    plt.plot(np.arange(len(max_angle_result[:cur_iter])), np.abs(max_angle_result[:cur_iter]), label='DDPG-{}'.format(args['method']), color='r')
+                    plt.xlabel('Episode')
+                    plt.ylabel('Max Angle (rad)')
+                    pic_name = "Safety Violation"
+                    plt.title(pic_name)
+                    plt.legend()
+                    img_path = os.path.join(save_dir, "MaxAngle.png")
+                    plt.savefig(img_path)
+                    plt.close('all')
+
+                    fig = plt.figure()
+                    # max_angleSpeed_result
+                    plt.plot(np.arange(len(max_angleSpeed_result[:cur_iter])), max_angleSpeed_result[:cur_iter], label='DDPG-{}'.format(args['method']), color='r')
+                    plt.xlabel('Episode')
+                    plt.ylabel('Max Angle Speed (rad/s)')
+                    pic_name = "Trend of Max Angle Speed"
+                    plt.title(pic_name)
+                    plt.legend()
+                    img_path = os.path.join(save_dir, "MaxAngleSpeed.png")
+                    plt.savefig(img_path)
+                    plt.close('all')
+
+                    # First policy vs last policy
+
+                    fig = plt.figure()
+                    plt.plot(np.arange(int(args['max_episode_len'])), np.ones(int(args['max_episode_len'])), label='Safe Boundary', color='k', linestyle='--')
+                    plt.plot(np.arange(int(args['max_episode_len'])), (-1) * np.ones(int(args['max_episode_len'])), color='k', linestyle='--')
+                    if (i * sub_episodes + el) == 0:
+                        step_policy_first = obs_x[:, 0] 
+                    else:
+                        step_policy_cur = obs_x[:, 0]
+                        plt.plot(np.arange(int(args['max_episode_len'])), step_policy_cur,
+                                 label='Epoch-{}'.format(i * sub_episodes + el + 1), color='b')
+                    plt.plot(np.arange(int(args['max_episode_len'])), step_policy_first, label='1st Epoch', color='r')
+                    plt.xlabel('Step')
+                    plt.ylabel('Angle (rad)')
+                    pic_name = "DDPG-{}".format(args['method'])
+                    plt.title(pic_name)
+                    plt.legend()
+                    img_path = os.path.join(save_dir, "Step_PolicyCompare.png")
                     plt.savefig(img_path)
                     plt.close('all')
                     break
