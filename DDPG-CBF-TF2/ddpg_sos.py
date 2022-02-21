@@ -1,9 +1,7 @@
 """
 Implementation of DDPG and SOS program
-
 The algorithm is tested on the Pendulum-v1 OpenAI gym task
 and developed with SOSOPT + Tensorflow
-
 Author: Hejun Huang
 """
 
@@ -87,7 +85,6 @@ class ActorNetwork(object):
     """
     Input to the network is the state, output is the action
     under a deterministic policy.
-
     The output layer activation is a tanh to keep the action
     between -action_bound and action_bound
     """
@@ -173,7 +170,6 @@ class CriticNetwork(object):
     """
     Input to the network is the state and action, output is Q(s,a).
     The action must be obtained from the output of the Actor network.
-
     """
 
     def __init__(self, state_dim, action_dim, learning_rate, tau, gamma, num_actor_vars):
@@ -547,7 +543,7 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
 
                     fig = plt.figure()
                     # max_angleSpeed_result
-                    plt.plot(np.arange(len(max_angleSpeed_result[:cur_iter])), max_angleSpeed_result[:cur_iter], label='DDPG-{}'.format(args['method']), color='r')
+                    plt.plot(np.arange(len(max_angleSpeed_result[:cur_iter])), np.abs(max_angleSpeed_result[:cur_iter]), label='DDPG-{}'.format(args['method']), color='r')
                     plt.xlabel('Episode')
                     plt.ylabel('Max Angle Speed (rad/s)')
                     pic_name = "Trend of Max Angle Speed"

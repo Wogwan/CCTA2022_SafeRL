@@ -8,7 +8,7 @@ import pandas as pd
 import random
 from matplotlib import pyplot as plt
 import datetime
-
+from absl import app
 
 class FigGen():
     
@@ -19,24 +19,24 @@ class FigGen():
         self.config = {
             'ddpg': {
                 'method': 'ONLY',
-                'date': '', # Format: 'yyyy-mm-dd-hour-min-second', e.g., '2022-02-21 09:07:59'
-                'res_dir': './res', # The path of result
+                'date': '2022-02-20-20-50-47', # Format: 'yyyy-mm-dd-hour-min-second', e.g., '2022-02-21 09:07:59'
+                'res_dir': './DDPG-TF2/res', # The path of result
                 'color': 'yellow',
                 'linestyle': '--',
             },
 
             'ddpg_qp': {
                 'method': 'QP',
-                'date': '', # Format: 'yyyy-mm-dd-hour-min-second', e.g., '2022-02-21 09:07:59'
-                'res_dir': './res', # The path of result
+                'date': '2022-02-20-19-54-20', # Format: 'yyyy-mm-dd-hour-min-second', e.g., '2022-02-21 09:07:59'
+                'res_dir': './DDPG-CBF-TF2/res', # The path of result
                 'color': 'blue',
                 'linestyle': '-.',
             },
 
             'ddpg_sosp': {
                 'method': 'SOSP',
-                'date': '', # Format: 'yyyy-mm-dd-hour-min-second', e.g., '2022-02-21 09:07:59'
-                'res_dir': '/res', # The path of result
+                'date': '2022-02-20-20-38-11', # Format: 'yyyy-mm-dd-hour-min-second', e.g., '2022-02-21 09:07:59'
+                'res_dir': './DDPG-CBF-TF2/res', # The path of result
                 'color': 'red',
                 'linestyle': '-',
             }
@@ -47,7 +47,7 @@ class FigGen():
         os.makedirs(self.save_dir, exist_ok=True)
         for algo in self.algo_lst:
             csv_dir = os.path.join(self.config[algo]['res_dir'], self.config[algo]['method'], 'csv', self.config[algo]['date'])
-            if os.path.exists(csv_dir):
+            if not os.path.exists(csv_dir):
                 raise Exception("Cannot find the dir [{}]".format(csv_dir))
             self.config[algo]['csv_dir'] = csv_dir
         
@@ -57,11 +57,12 @@ class FigGen():
         for algo in self.algo_lst:
             csv_dir = self.config[algo]['csv_dir']
             ep_data_pd = pd.read_csv(os.path.join(csv_dir, 'log.csv'), header=0)
-            self.config[algo]['Reward'] = list(ep_data_pd['Reward'])
-            self.config[algo]['Qmax'] = list(ep_data_pd['Qmax'])
-            self.config[algo]['MaxAngle'] = list(ep_data_pd['MaxAngle'])
-            self.config[algo]['MaxAngleSpeed'] = list(ep_data_pd['MaxAngleSpeed'])
-            eps = len(ep_data_pd['Reward'])
+            eps = 137 # len(ep_data_pd['Reward'])
+
+            self.config[algo]['Reward'] = list(ep_data_pd['Reward'])[:eps]
+            self.config[algo]['Qmax'] = list(ep_data_pd['Qmax'])[:eps]
+            self.config[algo]['MaxAngle'] = list(ep_data_pd['MaxAngle'])[:eps]
+            self.config[algo]['MaxAngleSpeed'] = list(ep_data_pd['MaxAngleSpeed'])[:eps]
             self.config[algo]['epoch'] = eps
             self.algo_eps.append(eps)
 
@@ -146,7 +147,7 @@ class FigGen():
         fig = plt.figure()
         # max_angleSpeed_result
         for algo in self.algo_lst:
-            plt.plot(np.arange(ep_min), self.config[algo]['MaxAngleSpeed'][:ep_min], label='DDPG-{}'.format(self.config[algo]['method']), color=self.config[algo]['color'], linestyle=self.config[algo]['linestyle'])
+            plt.plot(np.arange(ep_min), np.abs(self.config[algo]['MaxAngleSpeed'][:ep_min]), label='DDPG-{}'.format(self.config[algo]['method']), color=self.config[algo]['color'], linestyle=self.config[algo]['linestyle'])
         plt.xlabel('Episode')
         plt.ylabel('Max Angle Speed (rad/s)')
         pic_name = "Trend of Max Angle Speed"
@@ -184,7 +185,7 @@ class FigGen():
                 img_path = os.path.join(step_dir, "DDPG-{}_{}.png".format(self.config[algo]['method'], data_type))
                 plt.savefig(img_path)
                 plt.close('all')
-            print("Draw(step, {}) done..".format(data_type))
+            print("Draw(step, {}) done..".format(algo))
         print("Draw(step) done..")
 
 
