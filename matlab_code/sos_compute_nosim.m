@@ -27,8 +27,8 @@ a_rl = u;
 % pvar x1 x2;
 %% System information
 sys.g = 10; sys.gg = [0;1];
-sys.l = 1.; % Real value = 1.0
-sys.m = 1.; % Real value = 1.0
+sys.l = 1.4; % Real value = 1.0
+sys.m = 1.4; % Real value = 1.0
 sys.h_degree = 2; sys.L_au = 6;
 sys.input_limit = 4; u_out = 1;
 % Taylor based equation: taylor(10*sin(x1))

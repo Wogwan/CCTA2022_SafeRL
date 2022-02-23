@@ -578,7 +578,7 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
             if el <= 3:  # Update GP model each el except for the last el.
                 dynamics_gp.update_GP_dynamics(agent, path)
 
-        if (i <= 4):
+        if (i <= 50):
             # Update the cbf_bar function.
             agent.bar_comp.get_training_rollouts(paths)
             barr_loss = agent.bar_comp.train()
