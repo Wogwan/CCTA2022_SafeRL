@@ -1,39 +1,34 @@
 """
-Implementation of DDPG-CBF on the Pendulum-v1 OpenAI gym task
+Last update: 2022-06-17
+Name: ddpg_qp.py
+Description: Implementation of DDPG-CBF-QP on the Pendulum-v1 OpenAI gym task
 
-Author: rcheng805
+** The code is originated from 'rcheng805', and then is customized by us for our proposed framework. 
+** Link for the original code: https://github.com/rcheng805/RL-CBF
 """
 
 import os
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 import numpy as np
-
 np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 import pandas as pd
 import gym
-from gym import wrappers
-# import tflearn
+from gym import spaces
 import argparse
 import pprint as pp
+import datetime
+import sys
 from scipy.io import savemat
-import random
 from absl import app
 from matplotlib import pyplot as plt
 from replay_buffer import ReplayBuffer
-
 from learner import LEARNER
 from barrier_comp import BARRIER
 import cbf
 import dynamics_gp
-import datetime
-from gym import spaces
-import sys
-
 sys.path.append('../matlab_demo/matlab_rl/matlab_code')
 import logging
-
 logging.getLogger("tensorflow").setLevel(logging.WARNING)
 import matlab
 import matlab.engine
@@ -41,7 +36,7 @@ import matlab.engine
 
 def parse_args():
     cur_time = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    parser = argparse.ArgumentParser(description='provide arguments for DDPG agent')
+    parser = argparse.ArgumentParser(description='provide arguments for DDPG-QP agent')
 
     # agent parameters
     parser.add_argument('--actor-lr', help='actor network learning rate', default=0.0001)
@@ -53,26 +48,23 @@ def parse_args():
     parser.add_argument('--minibatch-size', help='size of minibatch for minibatch-SGD', default=64)
 
     # run parameters
-    parser.add_argument('--env', help='choose the gym env- tested on {Pendulum-v0}',
-                        default='Pendulum-v1')  # Pendulum-v0
+    parser.add_argument('--env', help='choose the gym env- tested on {Pendulum-v1}', default='Pendulum-v1') 
     parser.add_argument('--random-seed', help='random seed for repeatability', default=1234)
-    parser.add_argument('--max-episodes', help='max num of episodes to do while training', default=150)  # 150
-    parser.add_argument('--max-episode-len', help='max length of 1 episode', default=200)  #
+    parser.add_argument('--max-episodes', help='max number of episodes for training', default=150) 
+    parser.add_argument('--max-episode-len', help='max step of per episode', default=200) 
     parser.add_argument('--render-env', help='render the gym env', action='store_false')
     parser.add_argument('--use-gym-monitor', help='record gym results', action='store_false')
     parser.add_argument('--monitor-dir', help='directory for storing gym results', default='./res/QP/gym_ddpg/{}'.format(cur_time))
     parser.add_argument('--summary-dir', help='directory for storing tensorboard info', default='./res/QP/tensorboard/{}'.format(cur_time))
     parser.add_argument('--mat-dir', help='directory for storing mat info', default='./res/mat')
     parser.add_argument('--csv-dir', help='directory for storing csv info', default='./res/QP/csv/{}'.format(cur_time))
-    parser.add_argument('--mlp-mode', help='MLP model training model', default='original')  # original OR revised
+    parser.add_argument('--mlp-mode', help='MLP model training model', default='linesearch') # Two optization methods of the mlp model are provided here: 'linesearch' and 'adam'
     parser.add_argument('--method', help='QP/SOSP/ONLY(ddpg)', default='QP')
-
     parser.set_defaults(render_env=False)
     parser.set_defaults(use_gym_monitor=False)
 
     args = vars(parser.parse_args())
     pp.pprint(args)
-
     return args
 
 
@@ -82,11 +74,12 @@ def parse_args():
 
 class ActorNetwork(object):
     """
-    Input to the network is the state, output is the action
-    under a deterministic policy.
+    Input: Observation variables. 
+    Output: Action.
 
-    The output layer activation is a tanh to keep the action
-    between -action_bound and action_bound
+    In pendulum:
+    Input: Dim=(batch, 3), cos(theta), sin(theta), and Angular Velocity.
+    Output: Dim=(batch, 1), Torque.
     """
 
     def __init__(self, state_dim, action_dim, action_bound, learning_rate, tau, batch_size):
@@ -98,26 +91,18 @@ class ActorNetwork(object):
         self.batch_size = batch_size
 
         # Actor Network
-        # self.inputs, self.out, self.scaled_out = self.create_actor_network()
         self.actor_model = self.create_actor_network()
         self.actor_model.summary()
-        # model.trainable_variables, model.get_weights()
-        # self.network_params = tf.trainable_variables()
 
         # Target Network
         self.target_actor_model = self.create_actor_network()
 
         # Initialize the optimizer of actor network
         self.actor_opt = tf.keras.optimizers.Adam(self.learning_rate)
-        # Get the number of actor network and target actor network.
+        # Get the number of variables in the actor network and target actor network.
         self.num_trainable_vars = len(self.actor_model.trainable_variables) + len(self.target_actor_model.trainable_variables)
 
     def create_actor_network(self):
-        """
-        Create actor network
-        :param input_state_shape: state
-        :return: act
-        """
         inputs = tf.keras.Input(shape=(self.s_dim,))
         net = tf.keras.layers.Dense(units=400, use_bias=True)(inputs)
         net = tf.keras.layers.BatchNormalization()(net)
@@ -128,31 +113,33 @@ class ActorNetwork(object):
         # Final layer weights are init to Uniform[-3e-3, 3e-3]
         w_init = tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003)
         out = tf.keras.layers.Dense(units=self.a_dim, activation='tanh', use_bias=True, kernel_initializer=w_init)(net)
-        # Scale output to -action_bound to action_bound (-15, 15)
+        # Scale output from [-1, 1] to [-action_bound, action_bound]. i,e., (-15, 15) in pendulum-v1
         scaled_out = tf.keras.layers.Multiply()([out, self.action_bound])
         actor_model = tf.keras.models.Model(inputs=inputs, outputs=scaled_out)
         return actor_model
 
     def train(self, inputs, a_gradient):
-        # inputs: state
-        # a_gradient: the graident of critic model loss
+        """
+        Input: 
+            - inputs: states
+            - a_gradient: the graident of critic model 
+        
+        """
         with tf.GradientTape() as tape:
+            # The reason of the negative sign of a_gradient is that the target of critic model is maximizing the Q-value instead of minimizing that. 
             unnormal_grads = tape.gradient(self.actor_model(inputs, training=True),
                                            self.actor_model.trainable_variables, -a_gradient)
             grads = list(map(lambda x: tf.divide(x, self.batch_size), unnormal_grads))
         self.actor_opt.apply_gradients(zip(grads, self.actor_model.trainable_variables))
 
     def predict(self, inputs):
-        # actor_model
-        # inputs: states
         return self.actor_model.predict(inputs)
 
     def predict_target(self, inputs):
-        # actor_model
-        # inputs: states
         return self.target_actor_model.predict(inputs)
 
     def update_target_network(self):
+        # Update the target network periodically.
         actor_model_w = self.actor_model.get_weights()
         target_actor_model_w = self.target_actor_model.get_weights()
         update_w = []
@@ -169,7 +156,10 @@ class CriticNetwork(object):
     """
     Input to the network is the state and action, output is Q(s,a).
     The action must be obtained from the output of the Actor network.
+    Description: Learn a model that can accurately evaluate the performance of given actions.
 
+    Input: observation variables, and actions from the actor network .
+    Ouput: Q-value (Reward)
     """
 
     def __init__(self, state_dim, action_dim, learning_rate, tau, gamma, num_actor_vars):
@@ -182,21 +172,12 @@ class CriticNetwork(object):
         # Create the critic network
         self.critic_model = self.create_critic_network()
         self.critic_model.summary()
-        # model.trainable_variables, model.get_weights()
-        # self.network_params = tf.trainable_variables()[num_actor_vars:]
 
         # Target Network
         self.target_critic_model = self.create_critic_network()
 
         # Define loss and optimization Op
         self.critic_opt = tf.keras.optimizers.Adam(self.learning_rate)
-
-        # Get the gradient of the net w.r.t. the action.
-        # For each action in the minibatch (i.e., for each x in xs),
-        # this will sum up the gradients of each critic output in the minibatch
-        # w.r.t. that action. Each output is independent of all
-        # actions except for one.
-        # self.action_grads = tf.gradients(self.out, self.action)
 
     def create_critic_network(self):
         inputs = tf.keras.Input(shape=(self.s_dim,))
@@ -210,13 +191,9 @@ class CriticNetwork(object):
         out = tf.keras.layers.Add()([t1, t2])
         out = tf.keras.layers.ReLU()(out)
 
-        # linear layer connected to 1 output representing Q(s,a)
-        # Weights are init to Uniform[-3e-3, 3e-3]
         w_init = tf.keras.initializers.RandomUniform(minval=-0.003, maxval=0.003)
         out = tf.keras.layers.Dense(units=1, use_bias=True, kernel_initializer=w_init)(out)
         critic_model = tf.keras.models.Model(inputs=[inputs, action], outputs=out)
-        # (1, ) => (1batch, dim1)
-        # print(np.shape(out))
         return critic_model
 
     def compute_loss(self, v_pred, predicted_q_value):
@@ -230,7 +207,7 @@ class CriticNetwork(object):
             loss = self.compute_loss(v_pred, tf.stop_gradient(predicted_q_value))
         grads = tape.gradient(loss, self.critic_model.trainable_variables)
         self.critic_opt.apply_gradients(zip(grads, self.critic_model.trainable_variables))
-        return v_pred  # Q-value
+        return v_pred # Q-value
 
     def predict(self, inputs, action):
         # inputs: states
@@ -246,9 +223,11 @@ class CriticNetwork(object):
             tape.watch(actions)
             q_values = self.critic_model([inputs, actions])
             q_values = tf.squeeze(q_values)
+        # Should be noticed here that it actually hopes to maximize the Q-value (i.e., loss item in tape.gradient), so the direction of improvement should be postive gradient (x = x - (-gradient)) 
         return tape.gradient(q_values, actions)
 
     def update_target_network(self):
+        # Update the target network periodically.
         critic_model_w = self.critic_model.get_weights()
         target_critic_model_w = self.target_critic_model.get_weights()
         update_w = []
@@ -287,7 +266,6 @@ class OrnsteinUhlenbeckActionNoise:
 # ===========================
 
 # def build_summaries():
-#     # TODO
 #     episode_reward = tf.Variable(0.)
 #     tf.summary.scalar("Reward", episode_reward)
 #     episode_ave_max_q = tf.Variable(0.)
@@ -307,12 +285,10 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
     # summary_ops, summary_vars = build_summaries()
     sub_episodes = 5
     writer = tf.summary.create_file_writer(args['summary_dir'])
-    reward_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
-    maxq_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
-    max_angle_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
-    max_angleSpeed_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
-    
-     # sess.run(tf.global_variables_initializer())
+    reward_result = np.zeros(int(args['max_episodes']) * sub_episodes)  
+    maxq_result = np.zeros(int(args['max_episodes']) * sub_episodes)  
+    max_angle_result = np.zeros(int(args['max_episodes']) * sub_episodes) 
+    max_angleSpeed_result = np.zeros(int(args['max_episodes']) * sub_episodes)
 
     # Initialize target network weights
     actor.update_target_network()
@@ -321,91 +297,75 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
     # Initialize replay memory
     replay_buffer = ReplayBuffer(int(args['buffer_size']), int(args['random_seed']))
 
-    # Needed to enable BatchNorm.
-    # This hurts the performance on Pendulum but could be useful
-    # in other environments.
-    # tflearn.is_training(True)
-
     paths = list()
 
     for i in range(int(args['max_episodes'])):
 
         # Utilize GP from previous iteration while training current iteration
         if (agent.firstIter == 1):
+            # First episode
             pass
         else:
-            # 在第一个ep后才会将GP_model赋值与GP_model_prev
+            # The GP_model will be assigned to GP_model every episode.
             agent.GP_model_prev = agent.GP_model.copy()
+            # Update GP_model
             dynamics_gp.build_GP_model(agent)
-
+        
+        # Loop for sub-episodes
         for el in range(sub_episodes):
-            # 每次结束后都会Update一次GP model(除最后一次), 但本次episodes仍使用上一ep训练的GP，不会采用本轮最新实时update的GP.
             obs, action, rewards, action_bar, action_BAR, action_RL_list = [], [], [], [], [], []
             unwrapped_state_lst = []
 
             s = env.reset()
-            # a_temp = env.unwrapped.state
-            # print(env.unwrapped.state)
-            # Ensure that starting position is in "safe" region
             while (env.unwrapped.state[0] > 0.8 or env.unwrapped.state[0] < -0.8):
                 s = env.reset()
 
             ep_reward = 0
             ep_ave_max_q = 0
 
+            # Loop for steps
             for j in range(int(args['max_episode_len'])):
-
                 s_obs = env.unwrapped.state
                 # env.render()   # Show animation
 
                 # Added exploration noise
-                # a = actor.predict(np.reshape(s, (1, 3))) + (1. / (1. + i))
                 a = actor.predict(np.reshape(s, (1, actor.s_dim))) + actor_noise()
+                action_rl = a[0]  # (1, )
 
-                # Incorporate barrier function
-                action_rl = a[0]  # (1, )  [[3.44]] => [3.44]
-
-                # Utilize compensation barrier function
+                # Action compensation from previous CBF controllers.
                 if (agent.firstIter == 1):
-                    u_BAR_ = [0]  # 在第一个ep时的取值，因此时未对agent.bar_comp的MLP训练
+                    u_BAR_ = [0]  
                 else:
-                    u_BAR_ = agent.bar_comp.get_action(s)[0]  # (1, )
+                    u_BAR_ = agent.bar_comp.get_action(s)[0] # (1, )
 
                 action_RL = action_rl + u_BAR_  # (1, )
 
                 # Utilize safety barrier function
                 if (agent.firstIter == 1):
-                    # 在第一个ep时的取值，此时未对GP_model_prev赋值.
+                    # Initialization
                     [f, g, x, std] = dynamics_gp.get_GP_dynamics(agent, s, action_RL)
                 else:
-                    # 从第二个ep起，每个ep都将最新的GP_model赋值给GP_model_prev.
+                    # The GP model trained by the previous episode is used. 
                     [f, g, x, std] = dynamics_gp.get_GP_dynamics_prev(agent, s, action_RL)
-                # s:
+
+                # Action compensation from QP controller.
                 u_bar_ = cbf.control_barrier_qp(agent, np.squeeze(s), action_RL, f, g, x, std)
-                # u_bar_ = cbf.control_barrier_sosp(agent, np.squeeze(s), action_RL, f, g, x, std, eng)
 
                 action_ = action_RL + u_bar_  # (1, )
 
                 s2, r, terminal, info = env.step(action_)  # r: reward
                 s_next_unwrapped_state = env.unwrapped.state
-                print('QP next state', s_next_unwrapped_state)
-                print('QP control is:', u_bar_, '| Next state:', s_next_unwrapped_state[0], s_next_unwrapped_state[1])
-                # TODO 注意维度
-                # 此处存的时RL_policy原始的action, 仅对RL_Policy进行更新
+                # print('QP next state: {}'.format(s_next_unwrapped_state))
+                # print('QP control is: {} | Next state: {}, {}'.format(u_bar_, s_next_unwrapped_state[0], s_next_unwrapped_state[1]))
+
                 replay_buffer.add(np.reshape(s, (actor.s_dim,)), np.reshape(a, (actor.a_dim,)), r,
                                   terminal, np.reshape(s2, (actor.s_dim,)))
 
-                # 这里计划存储的是RL_action经过u_bar与u_BAR调整的deployed action.
-                # replay_buffer.add(np.reshape(s, (actor.s_dim,)), np.reshape(action_, (actor.a_dim,)), r,
-                #                  terminal, np.reshape(s2, (actor.s_dim,)))
-
-                # Keep adding experience to the memory until
-                # there are at least minibatch size samples
                 if replay_buffer.size() > int(args['minibatch_size']):
                     s_batch, a_batch, r_batch, t_batch, s2_batch = replay_buffer.sample_batch(
                         int(args['minibatch_size']))
 
-                    # Calculate targets
+                    # Predict the award of the current action.
                     target_q = critic.predict_target(s2_batch, actor.predict_target(s2_batch))
 
                     y_i = []
@@ -415,20 +375,15 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                         else:
                             y_i.append(r_batch[k] + critic.gamma * target_q[k])
 
-                    # Update the critic given the targets
-                    # TODO 注意y_i 维度
-                    # [1,2,..,64]
-
+                    # Update the critic network
                     v_pred = critic.train(s_batch, a_batch, np.reshape(y_i, (int(args['minibatch_size']), 1)))
 
                     ep_ave_max_q += np.amax(v_pred)
 
-                    # Update the actor policy using the sampled gradient
+                    # Update the actor policy 
                     a_outs = actor.predict(s_batch)
                     s_grads = critic.action_gradients(s_batch, a_outs)
                     grads = np.array(s_grads).reshape((-1, actor.a_dim))
-
-                    # grads维度
                     actor.train(s_batch, grads)
 
                     # Update target networks
@@ -455,14 +410,10 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                     max_thetaDot = np.max(obs_x[:, 1])
                     max_angleSpeed_result[i * sub_episodes + el] = max_thetaDot
 
-                    print('QP constrol is:', u_bar_, '| Next state:', s2[0], s2[1])
-                    print('action_rl:', action_rl, '|', ' u_BAR:', u_BAR_, '|', 'u_bar:', u_bar_, '|', 'output:',
-                          action_)
-                    print(action[len(action) - 1], '|', action_bar[len(action_bar) - 1], '|',
-                              action_RL_list[len(action_RL_list) - 1], '|', action_BAR[len(action_BAR) - 1])
-                    # print(obs)
-                    # print(obs.shape)
-                    # breakpoint()
+                    print('QP constrol is: {} | Next state:{}, {}'.format(u_bar_, s2[0], s2[1]))
+                    print('action_rl: {} | u_BAR: {} | u_bar: {} | output: {}'.format(action_rl, u_BAR_, u_bar_, action_))
+                    print('{} | {} | {} | {}'.format(action[len(action) - 1], action_bar[len(action_bar) - 1], action_RL_list[len(action_RL_list) - 1], action_BAR[len(action_BAR) - 1]))
+
                     with writer.as_default():
                         tf.summary.scalar("Reward", ep_reward, step=i*sub_episodes+el)
                         tf.summary.scalar("Qmax Value",  ep_ave_max_q / float(j), step=i*sub_episodes+el)    
@@ -472,12 +423,7 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
 
                     print('| Episode: {:d} sub- {} | Reward: {:d} | Qmax: {:.4f} | MaxAngle: {} | MaxAngleSpeed: {} '.format(i, i*sub_episodes+el, int(ep_reward), (ep_ave_max_q / float(j)), max_theta, max_thetaDot))
                     print('-'*20)
-                    # reward_result[i] = ep_reward
-                    # maxq_result[i] = ep_ave_max_q / float(j)
-                    # 200为最大max_time_steps
-                    # (200, 3)
-                    path = {"Observation": np.concatenate(obs).reshape(
-                        (int(args['max_episode_len']), agent.observation_size)),  # (200, 3)
+                    path = {"Observation": np.concatenate(obs).reshape((int(args['max_episode_len']), agent.observation_size)),  # (200, 3)
                             "Action": np.concatenate(action),
                             "Action_bar": np.concatenate(action_bar),
                             "Action_BAR": np.concatenate(action_BAR),
@@ -553,12 +499,11 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                     plt.close('all')
 
                     # First policy vs last policy
-
                     fig = plt.figure()
                     plt.plot(np.arange(int(args['max_episode_len'])), np.ones(int(args['max_episode_len'])), label='Safe Boundary', color='k', linestyle='--')
                     plt.plot(np.arange(int(args['max_episode_len'])), (-1) * np.ones(int(args['max_episode_len'])), color='k', linestyle='--')
                     if (i * sub_episodes + el) == 0:
-                        step_policy_first = obs_x[:, 0] # 改
+                        step_policy_first = obs_x[:, 0]
                     else:
                         step_policy_cur = obs_x[:, 0]
                         plt.plot(np.arange(int(args['max_episode_len'])), step_policy_cur,
@@ -574,7 +519,7 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
                     plt.close('all')
                     break
 
-            if el <= 3:  # Update GP model each el except for the last el.
+            if el <= 3: # Update GP model
                 dynamics_gp.update_GP_dynamics(agent, path)
 
         if (i <= 4):
@@ -582,9 +527,8 @@ def train(env: object, args, actor, critic, actor_noise, agent, eng) -> object:
             agent.bar_comp.get_training_rollouts(paths)
             barr_loss = agent.bar_comp.train()
         else:
-            # 由于在训练后期，action通常都在safe area内，因此bar_loss都趋于0，为了加速训练，此处直接取0，且不影响结果。
             barr_loss = 0.
-        agent.firstIter = 0  # 在第一个ep后变为0
+        agent.firstIter = 0  # flag
     print("Training done")
     return [paths, reward_result]
 
@@ -601,15 +545,11 @@ def main(_argv):
     #     print("Cannot find the GPU device.")
 
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    # eng = matlab.engine.connect_matlab()
     args = parse_args()
 
     matlab_eng_id = matlab.engine.find_matlab()
     eng = matlab.engine.connect_matlab(matlab_eng_id[0])
-
-    # with tf.Session() as sess:
-
-    env = gym.make(args['env'])  # unwrapped attr for raw settings in gym.
+    env = gym.make(args['env']) 
     np.random.seed(int(args['random_seed']))
     tf.random.set_seed(int(args['random_seed']))
     env.seed(int(args['random_seed']))
@@ -624,7 +564,6 @@ def main(_argv):
     state_dim = env.observation_space.shape[0]  # 3
     action_dim = env.action_space.shape[0]  # 1
     action_bound = env.action_space.high
-    # Ensure action bound is symmetric
     assert (env.action_space.high == -env.action_space.low)
 
     actor = ActorNetwork(state_dim, action_dim, action_bound,
@@ -640,10 +579,9 @@ def main(_argv):
 
     agent = LEARNER(env)
     agent.max_episode_len = int(args['max_episode_len'])
-    cbf.build_barrier(agent)  # 重复执行, 在LEARN.__init__已执行
-    dynamics_gp.build_GP_model(agent)  # 重复执行, 在LEARN.__init__已执行
-    agent.bar_comp = BARRIER(state_dim, action_dim, float(args['mlp_lr']),
-                             args['mlp_mode'])  # 3: state_dim, 1: action_dim
+    cbf.build_barrier(agent) 
+    dynamics_gp.build_GP_model(agent)
+    agent.bar_comp = BARRIER(state_dim, action_dim, float(args['mlp_lr']), args['mlp_mode']) # 3: state_dim, 1: action_dim
 
     [paths, reward_result] = train(env, args, actor, critic, actor_noise, agent, eng)
 

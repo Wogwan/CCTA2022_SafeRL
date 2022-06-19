@@ -1,10 +1,11 @@
 """
-Implementation of DDPG-SOS program
+Last update: 2022-06-17
+Name: ddpg_sos.py
+Author: Hejun HUANG, Zhenglong LI
+Description: Implementation of DDPG-CBF-SOSP on the Pendulum-v1 OpenAI gym task with TF eager mode.
 
-The algorithm is tested on the Pendulum-v1 and Polynomial-v0 OpenAI gym task
-and developed with SOSOPT + Tensorflow
-
-Author: Hejun Huang
+** The code is originated from 'rcheng805', and then is customized by us for our proposed framework. 
+** Link for the original code: https://github.com/rcheng805/RL-CBF
 """
 
 import os
@@ -299,7 +300,7 @@ class OrnsteinUhlenbeckActionNoise:
 
 def train(env, args, actor, critic, actor_noise, agent, eng):
     # Set up summary Ops
-    sub_episodes = 6  # 20
+    sub_episodes = 5 # 20
     writer = tf.summary.create_file_writer(args['summary_dir'])
     reward_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
     maxq_result = np.zeros(int(args['max_episodes']) * sub_episodes)  # Raw code: 2500
@@ -316,7 +317,7 @@ def train(env, args, actor, critic, actor_noise, agent, eng):
     s_record_sosp = []  # np.empty(shape=(0, 3))
     action_record_sosp = []  # np.array([])
     reward_boundary = []
-    sample_len = 3
+    sample_len = 2
 
     for i in range(int(args['max_episodes'])):
 
@@ -338,7 +339,7 @@ def train(env, args, actor, critic, actor_noise, agent, eng):
         else:
             coe, sys_bar, region, sys_d2 = build_barrier(agent, eng)
 
-        for el in range(sub_episodes):  # TODO 2
+        for el in range(sub_episodes): # TODO 2
             # print('test369')
             obs, action, rewards, action_bar, action_BAR, action_RL_list, information = [], [], [], [], [], [], []
             # obs, action, rewards = [], [], []
@@ -376,12 +377,12 @@ def train(env, args, actor, critic, actor_noise, agent, eng):
 
                 # Utilize compensation barrier function
                 if (agent.firstIter == 1):
-                    u_BAR_ = [0]  # 在第一个ep时的取值，因此时未对agent.bar_comp的MLP训练
+                    u_BAR_ = [0] 
                 else:
                     u_BAR_ = agent.bar_comp.get_action(s)[0]  # (1, )
 
                 action_RL = action_rl + u_BAR_  # (1, )
-                u_bar_ = poly_ubar_match(coe, s_cur_)  # TODO 3
+                u_bar_ = poly_ubar_match(coe, s_cur_) 
                 u_bar_ = u_bar_ / 10.
                 # Test 1
                 action_ = (action_RL + u_bar_) / 2.
@@ -456,8 +457,7 @@ def train(env, args, actor, critic, actor_noise, agent, eng):
                     obs_x = np.concatenate(information).reshape((200, 2))
                     max_theta = np.max(obs_x[:, 0])
                     with writer.as_default():
-                        print(action[len(action) - 1], '|', action_bar[len(action_bar) - 1], '|',
-                              action_RL_list[len(action_RL_list) - 1], '|', action_BAR[len(action_BAR) - 1])
+                        print("{} | {} | {} | {}".format(action[len(action) - 1],  action_bar[len(action_bar) - 1], action_RL_list[len(action_RL_list) - 1],  action_BAR[len(action_BAR) - 1]))
                         tf.summary.scalar("Reward", ep_reward, step=i * sub_episodes + el)
                         tf.summary.scalar("Qmax Value", ep_ave_max_q / float(j), step=i * sub_episodes + el)
                         tf.summary.scalar("Max Angle", max_theta, step=i * sub_episodes + el)
@@ -538,8 +538,7 @@ def train(env, args, actor, critic, actor_noise, agent, eng):
                     plt.close('all')
 
                     fig = plt.figure()
-                    plt.plot(np.arange(len(reward_result[:cur_iter])), reward_result[:cur_iter], label='ddpg-sosp',
-                             color='r')
+                    plt.plot(np.arange(len(reward_result[:cur_iter])), reward_result[:cur_iter], label='ddpg-sosp', color='r')
                     plt.xlabel('Episode')
                     plt.ylabel('Episode Reward')
                     pic_name = "Reward vs. Episode"
@@ -586,6 +585,8 @@ def main(_argv):
     #     os.system("pause")
 
     # Setup matlab engine
+    # 1. Setup existed matlab tools
+    # Run 'matlab.engine.shareEngine' in matlab
     matlab_eng_id = matlab.engine.find_matlab()
     eng = matlab.engine.connect_matlab(matlab_eng_id[0])
 

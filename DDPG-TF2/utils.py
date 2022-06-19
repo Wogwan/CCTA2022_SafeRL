@@ -186,29 +186,22 @@ def CONJUGATE_GRADIENT(fvp, y, k=10, tolerance=1e-6):
     
     return x
     
-def LINE_SEARCH(surr, theta_prev, full_step, num_backtracking=10, name=None):
-    #Get previous surrogate value (loss for Value function or reward for Policy)
-    prev_sur_objective = surr(theta_prev)
-    # backtracking :1,1/2,1/4,1/8
+def LINE_SEARCH(eval_func, para_prev, grad_step, num_backtracking=10, name=None):
+    prev_sur_objective = eval_func(para_prev)
+    # backtracking :1, 1/2, 1/4, 1/8, etc.
     for num_bt, fraction in enumerate(0.5**np.arange(num_backtracking)):
-        #Exponentially shrink beta (step size)
-        # step_frac = []
-        theta_new = []
-        for sig_step, sig_theta_prev in zip(full_step, theta_prev):
+        para_new = []
+        for sig_step, sig_theta_prev in zip(grad_step, para_prev):
             sig_step_frac = sig_step * fraction
             sig_theta_new = np.add(sig_theta_prev, sig_step_frac) 
-            theta_new.append(sig_theta_new)
+            para_new.append(sig_theta_new)
 
-        # step_frac = full_step*fraction
-        # theta -> theta + step
-        # print(np.shape(theta_prev))
-        # print(np.shape(step_frac))
-        # theta_new = theta_prev + step_frac
-        new_sur_objective = surr(theta_new)
+        new_sur_objective = eval_func(para_new)
+        # The new model will be returned if the loss decreases.
         sur_improvement = prev_sur_objective - new_sur_objective
         if sur_improvement > 0:
-            #print('%s improved from %3.4f to %3.4f' % (name, prev_sur_objective, new_sur_objective))
-            return theta_new
-    #print('Objective not improved - reverting to previous theta')
-    return theta_prev
+            # print('{} improved from {%3.4f} to {%3.4f}'.format(name, prev_sur_objective, new_sur_objective))
+            return para_new
+    # print('Objective not improved - reverting to previous theta')
+    return para_prev
     

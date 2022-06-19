@@ -1,7 +1,9 @@
 """ 
-Data structure for implementing experience replay
+Last update: 2022-06-17
+Name: replay_buffer.py
+Implementation: Data structure for implementing experience replay
 
-Author: Patrick Emami
+** Originated from Patrick Emami, and then revised with a more efficient implementation here.
 """
 from collections import deque
 import random
@@ -43,8 +45,8 @@ class ReplayBuffer(object):
         s_batch, a_batch, r_batch, t_batch, s2_batch = map(np.asarray, zip(*batch))
         """
         [ [s1, a1, r1, t1, ns1], [s2, a2, r2, .., ns2], ..]
-        After line 43:
-        [ s_batch: [s1, s2, s3, s4, .., s64], a_batch: [a1, a2, a3, ..., a64] , [r1, .., r64] ]
+        After 'map' func.:
+        [ [s1, s2, s3, s4, .., s64], [a1, a2, a3, ..., a64] , [r1, .., r64] ]
         """
         # s_batch = np.array([_[0] for _ in batch])
         # a_batch = np.array([_[1] for _ in batch])

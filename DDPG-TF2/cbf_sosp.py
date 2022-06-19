@@ -1,10 +1,12 @@
-import numpy
-import os
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Last update: 2022-06-17
+Name: cbf_sosp.py
+Description: API of programming controllers
+"""
 
 import numpy as np
-import scipy.io
-import matlab
-import matlab.engine
 
 def build_barrier(self, eng):
     eng.cd(r'.\matlab_code', nargout=0)

@@ -10,13 +10,11 @@ class LEARNER():
         self.torque_bound = 15.
         self.max_speed = 60.
 
-        #Set up observation space and action space
         self.observation_space = env.observation_space
         self.action_space = env.action_space
-        print('Observation space', self.observation_space)
-        print('Action space', self.action_space)
+        print('Observation space: {}'.format(self.observation_space))
+        print('Action space: {}'.format(self.action_space))
 
-        #Determine dimensions of observation & action space
         self.observation_size = self.env.observation_space.shape[0]
         self.action_size = self.action_space.shape[0]
         
