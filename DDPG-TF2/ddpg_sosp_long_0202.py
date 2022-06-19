@@ -29,8 +29,7 @@ import matlab.engine
 import sys
 from gym import spaces
 
-sys.path.append('C:/ASCC_2022_SafeRL/utest/ASCC2022_SafeRL/DDPG-TF2/matlab_code')
-# os.chdir(r'C:/ASCC_2022_SafeRL/utest/ASCC2022_SafeRL/DDPG-TF2/matlab_code')
+sys.path.append(r'./matlab_code')
 from barrier_previous import BARRIER
 
 
@@ -685,7 +684,7 @@ def main(_argv):
     agent = LEARNER(env, eng)
     agent.max_episode_len = int(args['max_episode_len'])
     # agent.max_episode_len = int(400)
-    agent.obs_file_path = 'C:/ASCC_2022_SafeRL/utest/ASCC2022_SafeRL/DDPG-TF2/res/mat/obs_save.mat'
+    agent.obs_file_path = './res/mat/obs_save.mat'
     agent.file_path = 'obs.mat'
     # coeffs = agent.current_cbf()
     agent.firstIter = 1

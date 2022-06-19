@@ -34,32 +34,6 @@ class BARRIER():
         self.mlp_model.summary()
         self.mlp_opt = tf.keras.optimizers.Adam(self.learning_rate)
 
-        # with tf.variable_scope('Compensator'):
-        #     #Input will be observation
-        #     self.x = tf.placeholder(tf.float32, [None, self.input_size], name='Obs')
-        #     #Target will be control action
-        #     self.target = tf.placeholder(tf.float32, [None, self.action_size], name='Target_comp')
-
-        #     #Model is MLP composed of 2 hidden layers with 50, 40 relu units
-        #     h1 = LINEAR(self.x, 30, name='h1')
-        #     h1_n1 = tf.nn.relu(h1)
-        #     h2 = LINEAR(h1_n1, 20, name='h2')
-        #     h2_n1 = tf.nn.relu(h2)
-        #     self.value = LINEAR(h2_n1, self.action_size, name='h3')
-
-        # tr_vrbs = self.mlp_model.trainable_variables
-        # for i in tr_vrbs:
-        #     print(i.op.name)
-
-        # Compute the loss and gradient of loss w.r.t. neural network weights
-        # target: historical u_BAR + current u_bar组成当前k的CBF补偿
-        # value: 输入当前k的起始状态s_t, 通过MLP去模拟当前K iter的补偿，然后计算loss.
-
-        # To adjust weights
-        # self.get_value = GetValue(self.sess, tr_vrbs, name='Compensator')
-        # self.set_value = SetValue(self.sess, tr_vrbs, name='Compensator')
-
-        # self.sess.run(tf.global_variables_initializer())
 
     def get_training_rollouts(self, paths):
         # Get observations and actions

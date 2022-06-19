@@ -10,6 +10,3 @@ def poly_ubar_match(b, s_input):
     for k in range(len(b)):
         fun = fac[k]*b[k]+fun
 
-# def calculate_ubar(b, s_input, a_input):
-#     k = poly_ubar_match(b)
-

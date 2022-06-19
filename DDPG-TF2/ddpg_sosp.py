@@ -25,7 +25,7 @@ import matlab
 import matlab.engine
 import sys
 from gym import spaces
-sys.path.append('C:/ASCC_2022_SafeRL/utest/ASCC2022_SafeRL/DDPG-TF2/matlab_code')
+sys.path.append(r'./matlab_code')
 from barrier_previous import BARRIER
 
 
