@@ -9,13 +9,13 @@ print("Current working directory: {0}".format(os.getcwd()))
 
 
 def build_barrier(eng):
-    eng.cd(r'C:\ASCC_2022_SafeRL\utest\ASCC2022_SafeRL\DDPG-TF2\matlab_code', nargout=0)
+    eng.cd(r'D:\one-drive\OneDrive-Umich\Desktop\2022Fall\Research\code\CCTA2022_SafeRL\DDPG-TF2\matlab_code', nargout=0)
     aa = 1
     c, d, e, f = eng.main_function(aa, nargout=4)
     return c, d, e, f
 
 def validate_safe_state(x1, x2, sys_bar, region, sys_d2, eng):
-    eng.cd(r'C:\ASCC_2022_SafeRL\utest\ASCC2022_SafeRL\DDPG-TF2\matlab_code', nargout=0)
+    eng.cd(r'D:\one-drive\OneDrive-Umich\Desktop\2022Fall\Research\code\CCTA2022_SafeRL\DDPG-TF2\matlab_code', nargout=0)
     c = eng.check_state(x1, x2, sys_bar, region, sys_d2, nargout=1)
     return c
 
