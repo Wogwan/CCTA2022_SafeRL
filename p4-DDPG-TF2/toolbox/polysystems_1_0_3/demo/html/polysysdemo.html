@@ -1,0 +1,424 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN">
+<html xmlns:mwsh="http://www.mathworks.com/namespace/mcode/v1/syntaxhighlight.dtd">
+   <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   
+      <!--
+This HTML is auto-generated from an M-file.
+To make changes, update the M-file and republish this document.
+      -->
+      <title>Using the Polysys Class</title>
+      <meta name="generator" content="MATLAB 7.6">
+      <meta name="date" content="2009-06-08">
+      <meta name="m-file" content="polysysdemo"><style>
+
+body {
+  background-color: white;
+  margin:10px;
+}
+
+h1 {
+  color: #990000; 
+  font-size: x-large;
+}
+
+h2 {
+  color: #990000;
+  font-size: medium;
+}
+
+/* Make the text shrink to fit narrow windows, but not stretch too far in 
+wide windows. */ 
+p,h1,h2,div.content div {
+  max-width: 600px;
+  /* Hack for IE6 */
+  width: auto !important; width: 600px;
+}
+
+pre.codeinput {
+  background: #EEEEEE;
+  padding: 10px;
+}
+@media print {
+  pre.codeinput {word-wrap:break-word; width:100%;}
+} 
+
+span.keyword {color: #0000FF}
+span.comment {color: #228B22}
+span.string {color: #A020F0}
+span.untermstring {color: #B20000}
+span.syscmd {color: #B28C00}
+
+pre.codeoutput {
+  color: #666666;
+  padding: 10px;
+}
+
+pre.error {
+  color: red;
+}
+
+p.footer {
+  text-align: right;
+  font-size: xx-small;
+  font-weight: lighter;
+  font-style: italic;
+  color: gray;
+}
+
+  </style></head>
+   <body>
+      <div class="content">
+         <h1>Using the Polysys Class</h1>
+         <introduction>
+            <p>This is a quick demonstration of the capabilities of the <tt>@polysys</tt> class.
+            </p>
+            <p><html> Timothy J. Wheeler<br> Dept. of Mechanical Engineering<br> University of California, Berkeley </html></p>
+         </introduction>
+         <h2>Contents</h2>
+         <div>
+            <ul>
+               <li><a href="#1">Creating a <tt>polysys</tt> object.</a></li>
+               <li><a href="#5">Simulating the system.</a></li>
+               <li><a href="#6">Converting other objects to <tt>polysys</tt> objects.</a></li>
+               <li><a href="#9">Interconnections.</a></li>
+               <li><a href="#12">Discrete-time systems.</a></li>
+               <li><a href="#14">Other Utilities</a></li>
+            </ul>
+         </div>
+         <h2>Creating a <tt>polysys</tt> object.<a name="1"></a></h2>
+         <p>Since the <tt>polysys</tt> class is built on the <tt>polynomial</tt> class, we first create some <tt>polynomial</tt> objects to work with:
+         </p><pre class="codeinput">pvar <span class="string">x1</span> <span class="string">x2</span> <span class="string">u1</span> <span class="string">u2</span>
+</pre><p>The equations of the system are of the form</p>
+         <p><img vspace="5" hspace="5" src="polysysdemo_eq71370.png"> </p>
+         <p><img vspace="5" hspace="5" src="polysysdemo_eq02159.png"> </p>
+         <p>Define the <tt>polynomial</tt> objects <tt>f</tt> and <tt>g</tt></p><pre class="codeinput">mu = -1;
+f = [ x2; mu*(1-x1^2)*x2 - x1 ];
+g = [x1;x2];
+</pre><p>The <tt>polynomial</tt> objects <tt>states</tt> and <tt>inputs</tt> specify the ordering of the variables.  For example, specifying <tt>states(1)=x1</tt> indicates that <tt>f(1)</tt> is the time derivative of <tt>x1</tt>.
+         </p><pre class="codeinput">states = [x1;x2];
+inputs = [];
+</pre><p>Finally, the <tt>polynomial</tt> objects are used to create a <tt>polysys</tt> object:
+         </p><pre class="codeinput">vdp = polysys(f,g,states,inputs)
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+State transition map is x'=f(x,u) where
+  f1 = x2
+  f2 = x1^2*x2 - x1 - x2
+Output response map is y=g(x,u) where
+  g1 = x1
+  g2 = x2
+</pre><h2>Simulating the system.<a name="5"></a></h2>
+         <p>The system is simulated over for a given time interval using the <tt>sim</tt> command.  Note that the syntax is similar to <tt>ode45</tt>.
+         </p><pre class="codeinput">T = 10;
+x0 = randn(2,1);
+[t,x] = sim(vdp,[0,T],x0);
+
+plot(x(:,1),x(:,2),<span class="string">'k-'</span>)
+xlabel(<span class="string">'x_1'</span>)
+ylabel(<span class="string">'x_2'</span>)
+title(<span class="string">'Trajectory for the Van der Pol oscillator'</span>)
+</pre><img vspace="5" hspace="5" src="polysysdemo_01.png"> <h2>Converting other objects to <tt>polysys</tt> objects.<a name="6"></a></h2>
+         <p>The simplest object that can be "promoted" to a <tt>polysys</tt> is a <tt>double</tt>.
+         </p><pre class="codeinput">gainsys = polysys(rand(2,2))
+</pre><pre class="codeoutput">Static polynomial map.
+Inputs: u1,u2
+Output response map is y=g(x,u) where
+  g1 = 0.54722*u1 + 0.14929*u2
+  g2 = 0.13862*u1 + 0.25751*u2
+</pre><p><tt>LTI</tt> objects can also be converted to <tt>polysys</tt> objects.
+         </p><pre class="codeinput">linearsys = rss(2,2,2);
+linearpolysys = polysys(linearsys)
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+Inputs: u1,u2
+State transition map is x'=f(x,u) where
+  f1 = -1.4751*u1 + 0.11844*u2 - 1.0515*x1 - 0.097639*x2
+  f2 = -0.234*u1 + 0.31481*u2 - 0.097639*x1 - 1.9577*x2
+Output response map is y=g(x,u) where
+  g1 = 1.4435*x1 + 0.62323*x2
+  g2 = -0.99209*u1 + 0.79905*x2
+</pre><p><tt>Polynomial</tt> objects can also be converted into a "static" <tt>polysys</tt> objects.
+         </p><pre class="codeinput">p = x1^2 - x1*x2;
+staticsys = polysys(p)
+</pre><pre class="codeoutput">Static polynomial map.
+Inputs: u1,u2
+Output response map is y=g(x,u) where
+  g1 = u1^2 - u1*u2
+</pre><h2>Interconnections.<a name="9"></a></h2>
+         <p><tt>Polysys</tt> supports most of the same interconnections as the <tt>LTI</tt> class with the same syntax and the same semantics.  Here are some examples:
+         </p><pre class="codeinput">append(linearpolysys,staticsys)
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+Inputs: u1,u2,u3,u4
+State transition map is x'=f(x,u) where
+  f1 = -1.4751*u1 + 0.11844*u2 - 1.0515*x1 - 0.097639*x2
+  f2 = -0.234*u1 + 0.31481*u2 - 0.097639*x1 - 1.9577*x2
+Output response map is y=g(x,u) where
+  g1 = 1.4435*x1 + 0.62323*x2
+  g2 = -0.99209*u1 + 0.79905*x2
+  g3 = u3^2 - u3*u4
+</pre><pre class="codeinput">series(linearpolysys,gainsys)
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+Inputs: u1,u2
+State transition map is x'=f(x,u) where
+  f1 = -1.4751*u1 + 0.11844*u2 - 1.0515*x1 - 0.097639*x2
+  f2 = -0.234*u1 + 0.31481*u2 - 0.097639*x1 - 1.9577*x2
+Output response map is y=g(x,u) where
+  g1 = -0.14811*u1 + 0.78991*x1 + 0.46034*x2
+  g2 = -0.25547*u1 + 0.20011*x1 + 0.29216*x2
+</pre><p>The methods <tt>append</tt>, <tt>feedback</tt>, <tt>parallel</tt>, and <tt>series</tt> are used to interconnect <tt>polysys</tt> objects.
+         </p>
+         <h2>Discrete-time systems.<a name="12"></a></h2>
+         <p>It is also possible to create discrete-time <tt>polysys</tt> objects, as follows:
+         </p><pre class="codeinput">a = 1;
+b = 1;
+fduff = [ x2; -b*x1 + a*x2 - x2^3 ];
+gduff = [ x1; x2 ];
+
+xduff = [ x1; x2];
+uduff = [];
+Tsample = 1;
+
+duff = polysys(fduff,gduff,xduff,uduff,Tsample)
+</pre><pre class="codeoutput">Discrete-time polynomial dynamic system.
+Sampling time: 1
+States: x1,x2
+State transition map is x(k+1)=f(x(k),u(k)) where
+  f1 = x2
+  f2 = -x2^3 - x1 + x2
+Output response map is y(k)=g(x(k),u(k)) where
+  g1 = x1
+  g2 = x2
+</pre><p>Discrete-time systems are simulated using the command <tt>dsim</tt>.  Note that simulation time points are specified as <tt>(0:T)</tt>, rather than <tt>[0,T]</tt>.
+         </p><pre class="codeinput">T = 100;
+x0 = [.1;.1];
+[t,x] = dsim(duff,(0:T),x0);
+
+plot(x(:,1),x(:,2),<span class="string">'k-'</span>)
+xlabel(<span class="string">'x_1'</span>)
+ylabel(<span class="string">'x_2'</span>)
+title(<span class="string">'Trajectory for the Duffing map'</span>)
+</pre><img vspace="5" hspace="5" src="polysysdemo_02.png"> <h2>Other Utilities<a name="14"></a></h2>
+         <p><tt>Polysys</tt> object can be linearized at a given point.  This syntax returns an <tt>SS</tt> object:
+         </p><pre class="codeinput">xe = [1;2];
+vdplin = linearize(vdp,xe);
+class(vdplin)
+</pre><pre class="codeoutput">ans =
+ss
+</pre><p>This syntax returns the state-space data of the linearization:</p><pre class="codeinput">[A,B,C,D] = linearize(vdp);
+</pre><p>Check if a <tt>polysys</tt> object is linear.
+         </p><pre class="codeinput">islinear(linearpolysys)
+</pre><pre class="codeoutput">ans =
+     1
+</pre><pre class="codeinput">islinear(vdp)
+</pre><pre class="codeoutput">ans =
+     0
+</pre><p>Subsystems are referenced using the same syntax as <tt>LTI</tt> objects:
+         </p><pre class="codeinput">linearpolysys(1,1)
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+Inputs: u1
+State transition map is x'=f(x,u) where
+  f1 = -1.4751*u1 - 1.0515*x1 - 0.097639*x2
+  f2 = -0.234*u1 - 0.097639*x1 - 1.9577*x2
+Output response map is y=g(x,u) where
+  g1 = 1.4435*x1 + 0.62323*x2
+</pre><p>We can also get function handles to the system's state transition and output response maps.  This is mostly used to build
+            simulation routines that require handles to functions with a certain syntax (i.e., <tt>ode45</tt>).
+         </p><pre class="codeinput">[F,G] = function_handle(vdp);
+
+xeval = randn(2,1);
+ueval = []; <span class="comment">% VDP is autonomous</span>
+teval = []; <span class="comment">% The time input is just for compatibility with ode solvers</span>
+xdot = F(teval,xeval,ueval)
+</pre><pre class="codeoutput">xdot =
+   -0.7420
+    0.9962
+</pre><p>We can multiply <tt>polysys</tt> objects by scalars or matrices.
+         </p><pre class="codeinput">M = diag([2,3]);
+M*vdp
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+State transition map is x'=f(x,u) where
+  f1 = x2
+  f2 = x1^2*x2 - x1 - x2
+Output response map is y=g(x,u) where
+  g1 = 2*x1
+  g2 = 3*x2
+</pre><pre class="codeinput">12*vdp
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+State transition map is x'=f(x,u) where
+  f1 = x2
+  f2 = x1^2*x2 - x1 - x2
+Output response map is y=g(x,u) where
+  g1 = 12*x1
+  g2 = 12*x2
+</pre><pre class="codeinput">linearpolysys*M
+</pre><pre class="codeoutput">Continuous-time polynomial dynamic system.
+States: x1,x2
+Inputs: u1,u2
+State transition map is x'=f(x,u) where
+  f1 = -2.9503*u1 + 0.35533*u2 - 1.0515*x1 - 0.097639*x2
+  f2 = -0.46801*u1 + 0.94443*u2 - 0.097639*x1 - 1.9577*x2
+Output response map is y=g(x,u) where
+  g1 = 1.4435*x1 + 0.62323*x2
+  g2 = -1.9842*u1 + 0.79905*x2
+</pre><p class="footer"><br>
+            Published with MATLAB&reg; 7.6<br></p>
+      </div>
+      <!--
+##### SOURCE BEGIN #####
+%% Using the Polysys Class
+% This is a quick demonstration of the capabilities of the |@polysys| class.
+%
+% <html>
+% Timothy J. Wheeler<br>
+% Dept. of Mechanical Engineering<br>
+% University of California, Berkeley
+% </html>
+
+%% Creating a |polysys| object.
+% Since the |polysys| class is built on the |polynomial| class, we first
+% create some |polynomial| objects to work with:
+pvar x1 x2 u1 u2
+
+%%
+% The equations of the system are of the form
+%
+% $$\dot{x} = f(x,u)$$
+%
+% $$y = g(x,u)$$
+%
+% Define the |polynomial| objects |f| and |g|
+mu = -1;
+f = [ x2; mu*(1-x1^2)*x2 - x1 ];
+g = [x1;x2];
+
+%%
+% The |polynomial| objects |states| and |inputs| specify the ordering of
+% the variables.  For example, specifying |states(1)=x1| indicates that
+% |f(1)| is the time derivative of |x1|.
+states = [x1;x2];
+inputs = [];
+
+%%
+% Finally, the |polynomial| objects are used to create a |polysys| object:
+vdp = polysys(f,g,states,inputs)
+
+%% Simulating the system.
+% The system is simulated over for a given time interval using the
+% |sim| command.  Note that the syntax is similar to |ode45|.
+T = 10;
+x0 = randn(2,1);
+[t,x] = sim(vdp,[0,T],x0);
+
+plot(x(:,1),x(:,2),'k-')
+xlabel('x_1')
+ylabel('x_2')
+title('Trajectory for the Van der Pol oscillator')
+
+%% Converting other objects to |polysys| objects.
+% The simplest object that can be "promoted" to a |polysys| is a |double|.
+gainsys = polysys(rand(2,2))
+
+%%
+% |LTI| objects can also be converted to |polysys| objects.
+linearsys = rss(2,2,2);
+linearpolysys = polysys(linearsys)
+
+%%
+% |Polynomial| objects can also be converted into a "static" |polysys| objects.
+p = x1^2 - x1*x2;
+staticsys = polysys(p)
+
+%% Interconnections.
+% |Polysys| supports most of the same interconnections as the |LTI| class with
+% the same syntax and the same semantics.  Here are some examples:
+append(linearpolysys,staticsys)
+
+%%
+series(linearpolysys,gainsys)
+
+%%
+% The methods |append|, |feedback|, |parallel|, and |series| are used to
+% interconnect |polysys| objects.
+
+%% Discrete-time systems.
+% It is also possible to create discrete-time |polysys| objects, as follows:
+
+a = 1;
+b = 1;
+fduff = [ x2; -b*x1 + a*x2 - x2^3 ];
+gduff = [ x1; x2 ];
+
+xduff = [ x1; x2];
+uduff = [];
+Tsample = 1;
+
+duff = polysys(fduff,gduff,xduff,uduff,Tsample)
+
+%%
+% Discrete-time systems are simulated using the command |dsim|.  Note that
+% simulation time points are specified as |(0:T)|, rather than |[0,T]|.
+T = 100;
+x0 = [.1;.1];
+[t,x] = dsim(duff,(0:T),x0);
+
+plot(x(:,1),x(:,2),'k-')
+xlabel('x_1')
+ylabel('x_2')
+title('Trajectory for the Duffing map')
+
+%% Other Utilities
+% |Polysys| object can be linearized at a given point.  This syntax returns
+% an |SS| object:
+xe = [1;2];
+vdplin = linearize(vdp,xe);
+class(vdplin)
+%%
+% This syntax returns the state-space data of the linearization:
+[A,B,C,D] = linearize(vdp);
+
+%%
+% Check if a |polysys| object is linear.
+islinear(linearpolysys)
+%%
+islinear(vdp)
+
+%%
+% Subsystems are referenced using the same syntax as |LTI| objects:
+linearpolysys(1,1)
+
+%%
+% We can also get function handles to the system's state transition and
+% output response maps.  This is mostly used to build simulation routines
+% that require handles to functions with a certain syntax (i.e., |ode45|).
+[F,G] = function_handle(vdp);
+
+xeval = randn(2,1);
+ueval = []; % VDP is autonomous
+teval = []; % The time input is just for compatibility with ode solvers
+xdot = F(teval,xeval,ueval)
+
+%%
+% We can multiply |polysys| objects by scalars or matrices.
+M = diag([2,3]);
+M*vdp
+%%
+12*vdp
+%%
+linearpolysys*M
+
+
+
+
+
+##### SOURCE END #####
+-->
+   </body>
+</html>
